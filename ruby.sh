@@ -9,6 +9,8 @@ COLOR_RESET="\x1b[0m"
 CHAR_ARROW="\xE2\x9E\x9C"
 CHAR_XMARK="\xE2\x9C\x97"
 
+RBENV_VERSION=""
+
 
 function args() {
 
@@ -40,12 +42,12 @@ function args() {
   done
 }
 
-
+# TODO think about how the notification works about new versions and how this script would work.
 function usage() {
   echo "Usage: $0 [options]"
   echo ""
-  echo " --install        Isntall ruby environment"
-  echo " --remove         Remove ruby ( and rbenv) installation"
+  echo " --install        Install ruby environment"
+  echo " --remove         Remove ruby (and rbenv) installation"
 
 	exit
 
@@ -54,10 +56,50 @@ function usage() {
 
 function remove_ruby() {
 
-  # TODO: Add an "are you sure"
+  # Prompt user for full names used for Git
 
-  rm -rf ~/.rbenv ~/.gemrc ~/.gem ~/.bundler
-  sed -i '/[[:space:]]*#### rbenv/, /#### rbenv ####\n[[:space:]]*/d' ~/.bashrc
+  yn=""
+
+  while [ -z "$yn" ]
+  do
+
+    echo "Removing ruby-install deletes the following files and directories:"
+    echo "  - ~/.rbenv"
+    echo "  - ~/.gemrc"
+    echo "  - ~/.gem"
+    echo "  - ~/.bundler"
+    echo ""
+
+    # shellcheck disable=SC2039 disable=SC2162
+    read -p "Confirm ruby-install removal [Y/n]: " yn
+
+    case "$yn" in
+      ""|[Yy])
+
+          yn="y"
+          rm -rf ~/.rbenv ~/.gemrc ~/.gem ~/.bundler
+          sed -i '/[[:space:]]*#### ruby/, /#### ruby ####\n[[:space:]]*/d' ~/.bashrc
+
+          echo "Removal of ruby-install complete."
+      
+        ;;
+      [Nn])
+
+          echo "Removal of ruby-install was canceled."
+
+        ;;
+      *)
+        yn=""
+        ;;
+    esac
+
+    if [ -z "$yn" ]; then
+      echo "Something is wrong, let's try again."
+    fi
+
+  done
+
+  
 
   exit
 
@@ -68,6 +110,12 @@ function check() {
 command -v git >/dev/null 2>&1 ||
   {
     echo -e >&2 "${COLOR_RED}${CHAR_XMARK}${COLOR_RESET} git not installed or in path."
+    exit 1
+  }
+
+RBENV_VERSION="$(git -c 'versionsort.suffix=-' ls-remote --exit-code --refs --sort='version:refname' --tags https://github.com/rbenv/rbenv.git '*.*.*' | tail --lines=1 | cut --delimiter='/' --fields=3)" ||
+  {
+    echo -e >&2 "${COLOR_RED}${CHAR_XMARK}${COLOR_RESET} cannot reach GitHub for rbenv."
     exit 1
   }
 
@@ -106,13 +154,14 @@ function install_ruby() {
 
   cat << EOT >> "${HOME}"/.bashrc
 
-#### rbenv ####
+#### ruby ####
 
 # Automatically update rbenv and builds
 git -C ~/.rbenv/ pull 2>/dev/null 1>/dev/null
 git -C ~/.rbenv/plugins/ruby-build/ pull 2>/dev/null 1>/dev/null
 
 # Set/update environment variables
+export RBENV_VER_INSTALLED="${RBENV_VERSION}"
 export RBENV_ROOT="\$HOME/.rbenv"
 export PATH="\$RBENV_ROOT/bin:\$PATH"
 
@@ -128,7 +177,7 @@ if [ "\$RUBY_VER_INSTALLED" != "\$RUBY_VER_LATEST" ]; then
     echo -e "${COLOR_GREEN}${CHAR_ARROW}${COLOR_RESET} New version of ruby is available: \$RUBY_VER_INSTALLED -> ${COLOR_GREEN}\$RUBY_VER_LATEST${COLOR_RESET}"
 fi
 
-#### rbenv ####
+#### ruby ####
 
 EOT
 
@@ -138,7 +187,12 @@ EOT
   gem update
   gem cleanup
 
+  gem install bundler
+
   rbenv rehash
+
+  # Running rbenv-doctor
+  curl -fsSL https://github.com/rbenv/rbenv-installer/raw/master/bin/rbenv-doctor | bash
 
 }
 
